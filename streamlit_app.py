@@ -1,66 +1,106 @@
+"""
+💬 Streamlit Chatbot using Groq (Gemma2 / LLaMA)
+- Developed by Laiba Rani
+- API key is loaded securely from .env or Streamlit Secrets
+"""
+
 import os
 import streamlit as st
 from dotenv import load_dotenv
-from langchain.chat_models import ChatOpenAI
-from langchain.chains import ConversationChain
-from langchain.memory import ConversationBufferMemory
+from langchain_groq import ChatGroq
+from langchain_core.messages import HumanMessage, AIMessage
 
-# --- Load .env for local ---
+# -----------------------------
+# Load environment variables
+# -----------------------------
 load_dotenv()
-
-# --- API key handling (first Streamlit secrets, then .env) ---
-api_key = st.secrets.get("GROQ_API_KEY", os.getenv("GROQ_API_KEY"))
+api_key = os.getenv("GROQ_API_KEY")
+if not api_key and "GROQ_API_KEY" in st.secrets:
+    api_key = st.secrets["GROQ_API_KEY"]
 
 if not api_key:
-    st.error("🚨 API key not found! Please add it in Streamlit secrets or .env file.")
+    st.sidebar.warning("Enter your GROQ API key in .env file or Streamlit Secrets.")
     st.stop()
 
-# --- Initialize Chat Model ---
-llm = ChatOpenAI(
-    model_name="gemma2-9b-it",   # Groq ka model
-    openai_api_key=api_key
+# -----------------------------
+# Page config
+# -----------------------------
+st.set_page_config(page_title="Groq Chatbot", page_icon="💬", layout="centered")
+st.title("💬 Groq Chatbot")
+st.caption("Developed by Laiba Rani — Minimal, fast, clean chat interface")
+
+# -----------------------------
+# Sidebar: Settings
+# -----------------------------
+with st.sidebar:
+    st.header("Settings")
+    model = st.selectbox(
+        "Model",
+        ["gemma2-9b-it", "llama3-70b-8192", "llama3-8b-8192", "mixtral-8x7b-32768"],
+        index=0
+    )
+    temperature = st.slider("Creativity (temperature)", 0.0, 1.5, 0.3, 0.1)
+
+# -----------------------------
+# Initialize LLM
+# -----------------------------
+llm = ChatGroq(
+    groq_api_key=api_key,
+    model_name=model,
+    temperature=temperature
 )
 
-# --- Conversation Memory ---
-memory = ConversationBufferMemory(return_messages=True)
-conversation = ConversationChain(llm=llm, memory=memory, verbose=True)
-
-# --- Streamlit UI ---
-st.set_page_config(page_title="Groq Chatbot", page_icon="🤖", layout="centered")
-
-st.title("🤖 Groq AI Chatbot")
-st.caption("Powered by **LangChain + Groq** 🚀")
-st.markdown("---")
-
-# --- Chat history in session ---
+# -----------------------------
+# Chat memory
+# -----------------------------
 if "messages" not in st.session_state:
-    st.session_state["messages"] = []
+    st.session_state.messages = [
+        AIMessage(content="Assalam o Alaikum! I'm your Groq chatbot. How can I help you today?")
+    ]
 
-# --- Display previous messages ---
-for msg in st.session_state["messages"]:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+for msg in st.session_state.messages:
+    role = "assistant" if isinstance(msg, AIMessage) else "user"
+    with st.chat_message(role):
+        st.markdown(msg.content)
 
-# --- User Input ---
-if prompt := st.chat_input("Type your message..."):
-    # Save user message
-    st.session_state["messages"].append({"role": "user", "content": prompt})
+# -----------------------------
+# User input
+# -----------------------------
+prompt = st.chat_input("Type your message…")
+if prompt:
+    user_msg = HumanMessage(content=prompt)
+    st.session_state.messages.append(user_msg)
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Generate response
+    # Prepare history
+    history_for_llm = []
+    for m in st.session_state.messages:
+        if isinstance(m, HumanMessage):
+            history_for_llm.append(HumanMessage(content=m.content))
+        else:
+            history_for_llm.append(AIMessage(content=m.content))
+
+    # Model response
     with st.chat_message("assistant"):
-        with st.spinner("Thinking... 🤔"):
-            try:
-                response = conversation.predict(input=prompt)
-            except Exception as e:
-                response = f"⚠️ Error: {str(e)}"
+        try:
+            response = llm.invoke(history_for_llm)
+            reply = response.content
+            st.markdown(reply)
+            st.session_state.messages.append(AIMessage(content=reply))
+        except Exception as e:
+            st.error(f"Error: {e}")
 
-            st.markdown(response)
+# -----------------------------
+# Clear chat button
+# -----------------------------
+with st.sidebar:
+    if st.button("🗑️ Clear chat"):
+        st.session_state.messages = [AIMessage(content="Chat cleared. How can I help?")]
+        st.experimental_rerun()
 
-    # Save bot response
-    st.session_state["messages"].append({"role": "assistant", "content": response})
-
-# --- Footer ---
+# -----------------------------
+# Footer
+# -----------------------------
 st.markdown("---")
-st.caption("Made with ❤️ using Streamlit, LangChain & Groq API")
+st.markdown("💻 Developed by **Laiba Rani**")
