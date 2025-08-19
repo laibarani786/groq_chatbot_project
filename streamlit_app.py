@@ -1,9 +1,3 @@
-"""
-💬 Streamlit Chatbot using Groq (Gemma2 / LLaMA)
-- Developed by Laiba Rani
-- API key is loaded securely from .env or Streamlit Secrets
-"""
-
 import os
 import streamlit as st
 from dotenv import load_dotenv
@@ -11,15 +5,20 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, AIMessage
 
 # -----------------------------
-# Load environment variables
+# Load .env file (local)
 # -----------------------------
 load_dotenv()
-api_key = os.getenv("GROQ_API_KEY")
-if not api_key and "GROQ_API_KEY" in st.secrets:
-    api_key = st.secrets["GROQ_API_KEY"]
+api_key = os.getenv("GROQ_API_KEY")  # Local .env
+
+# -----------------------------
+# Fallback to Streamlit Secrets
+# -----------------------------
+if not api_key:
+    if "GROQ_API_KEY" in st.secrets:
+        api_key = st.secrets["GROQ_API_KEY"]
 
 if not api_key:
-    st.sidebar.warning("Enter your GROQ API key in .env file or Streamlit Secrets.")
+    st.sidebar.warning("Enter your GROQ API key in .env or Streamlit Secrets.")
     st.stop()
 
 # -----------------------------
@@ -51,13 +50,16 @@ llm = ChatGroq(
 )
 
 # -----------------------------
-# Chat memory
+# Initialize chat memory
 # -----------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = [
         AIMessage(content="Assalam o Alaikum! I'm your Groq chatbot. How can I help you today?")
     ]
 
+# -----------------------------
+# Display chat messages
+# -----------------------------
 for msg in st.session_state.messages:
     role = "assistant" if isinstance(msg, AIMessage) else "user"
     with st.chat_message(role):
@@ -73,15 +75,10 @@ if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Prepare history
-    history_for_llm = []
-    for m in st.session_state.messages:
-        if isinstance(m, HumanMessage):
-            history_for_llm.append(HumanMessage(content=m.content))
-        else:
-            history_for_llm.append(AIMessage(content=m.content))
+    # Prepare history for LLM
+    history_for_llm = st.session_state.messages.copy()
 
-    # Model response
+    # Get model response
     with st.chat_message("assistant"):
         try:
             response = llm.invoke(history_for_llm)
@@ -90,14 +87,6 @@ if prompt:
             st.session_state.messages.append(AIMessage(content=reply))
         except Exception as e:
             st.error(f"Error: {e}")
-
-# -----------------------------
-# Clear chat button
-# -----------------------------
-with st.sidebar:
-    if st.button("🗑️ Clear chat"):
-        st.session_state.messages = [AIMessage(content="Chat cleared. How can I help?")]
-        st.experimental_rerun()
 
 # -----------------------------
 # Footer
